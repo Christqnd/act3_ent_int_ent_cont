@@ -25,16 +25,44 @@ test-behavior:
 	docker run --rm --volume `pwd`:/opt/calc --env PYTHONPATH=/opt/calc -w /opt/calc calculator-app:latest behave --junit --junit-directory results/  --tags ~@wip test/behavior/
 	docker run --rm --volume `pwd`:/opt/calc --env PYTHONPATH=/opt/calc -w /opt/calc calculator-app:latest bash test/behavior/junit-reports.sh
 	
+
+
 test-api:
-	docker network create calc-test-api || true
-	docker run -d --network calc-test-api --env PYTHONPATH=/opt/calc --name apiserverapi --env FLASK_APP=app/api.py -p 5001:5001 -w /opt/calc calculator-app:latest flask run --host=0.0.0.0
-	docker run --network calc-test-api --name api-tests --env PYTHONPATH=/opt/calc --env BASE_URL=http://apiserverapi:5001/ -w /opt/calc calculator-app:latest pytest --junit-xml=results/api_result.xml -m api  || true
-	docker cp api-tests:/opt/calc/results ./
 	docker stop apiserverapi || true
-	docker rm --force apiserverapi || true
-	docker stop api-tests || true
-	docker rm --force api-tests || true
+	docker rm -f apiserverapi || true
 	docker network rm calc-test-api || true
+	docker network create calc-test-api || true
+
+	docker run -d --rm --volume `pwd`:/opt/calc --network calc-test-api \
+		--env PYTHONPATH=/opt/calc --name apiserverapi --env FLASK_APP=app/api.py \
+		-w /opt/calc calculator-app:latest flask run --host=0.0.0.0
+
+	docker run --rm --volume `pwd`:/opt/calc --network calc-test-api \
+		--env PYTHONPATH=/opt/calc --env BASE_URL=http://apiserverapi:5000/ \
+		-w /opt/calc calculator-app:latest pytest \
+		--cov --cov-report=xml:results/api_coverage.xml \
+		--cov-report=html:results/api_coverage \
+		--junit-xml=results/api_result.xml -m api || true
+
+	docker run --rm --volume `pwd`:/opt/calc --env PYTHONPATH=/opt/calc \
+		-w /opt/calc calculator-app:latest junit2html \
+		results/api_result.xml results/api_result.html
+
+	docker stop apiserverapi || true
+	docker rm -f apiserverapi || true
+	docker network rm calc-test-api || true
+
+
+# test-api:
+# 	docker network create calc-test-api || true
+# 	docker run -d --network calc-test-api --env PYTHONPATH=/opt/calc --name apiserverapi --env FLASK_APP=app/api.py -p 5001:5001 -w /opt/calc calculator-app:latest flask run --host=0.0.0.0
+# 	docker run --network calc-test-api --name api-tests --env PYTHONPATH=/opt/calc --env BASE_URL=http://apiserverapi:5001/ -w /opt/calc calculator-app:latest pytest --junit-xml=results/api_result.xml -m api  || true
+# 	docker cp api-tests:/opt/calc/results ./
+# 	docker stop apiserverapi || true
+# 	docker rm --force apiserverapi || true
+# 	docker stop api-tests || true
+# 	docker rm --force api-tests || true
+# 	docker network rm calc-test-api || true
 
 test-e2e:
 	docker network create calc-test-e2e || true

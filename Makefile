@@ -25,46 +25,32 @@ test-behavior:
 	docker run --rm --volume `pwd`:/opt/calc --env PYTHONPATH=/opt/calc -w /opt/calc calculator-app:latest behave --junit --junit-directory results/  --tags ~@wip test/behavior/
 	docker run --rm --volume `pwd`:/opt/calc --env PYTHONPATH=/opt/calc -w /opt/calc calculator-app:latest bash test/behavior/junit-reports.sh
 	
-
-
 test-api:
+	####### Limpieza previa de contenedores y red
 	docker stop apiserverapi || true
 	docker rm -f apiserverapi || true
 	docker network rm calc-test-api || true
 	docker network create calc-test-api || true
 
-	docker run -d --rm --volume `pwd`:/opt/calc --network calc-test-api \
-		--env PYTHONPATH=/opt/calc --name apiserverapi --env FLASK_APP=app/api.py \
-		-w /opt/calc calculator-app:latest flask run --host=0.0.0.0
+	####### Levanta backend API Flask en contenedor
+	docker run -d --rm -v `pwd`:/opt/calc --network calc-test-api \
+		--env PYTHONPATH=/opt/calc --name apiserverapi --env FLASK_APP=app/api.py -w /opt/calc calculator-app:latest flask run --host=0.0.0.0
 
-	docker run --rm --volume `pwd`:/opt/calc --network calc-test-api \
-		--env PYTHONPATH=/opt/calc --env BASE_URL=http://apiserverapi:5000/ \
-		-w /opt/calc calculator-app:latest pytest \
-		--cov --cov-report=xml:results/api_coverage.xml \
-		--cov-report=html:results/api_coverage \
-		--junit-xml=results/api_result.xml -m api || true
+	####### Ejecuta tests API con pytest y genera reportes
+	docker run --rm -v `pwd`:/opt/calc --network calc-test-api \
+		--env PYTHONPATH=/opt/calc --env BASE_URL=http://apiserverapi:5000/ -w /opt/calc calculator-app:latest pytest --cov --cov-report=xml:results/api_coverage.xml --cov-report=html:results/api_coverage --junit-xml=results/api_result.xml -m api || true
 
-	docker run --rm --volume `pwd`:/opt/calc --env PYTHONPATH=/opt/calc \
-		-w /opt/calc calculator-app:latest junit2html \
-		results/api_result.xml results/api_result.html
+	####### Convierte reporte XML de junit a HTML
+	docker run --rm -v `pwd`:/opt/calc --env PYTHONPATH=/opt/calc -w /opt/calc calculator-app:latest junit2html results/api_result.xml results/api_result.html
 
+	####### Limpieza final de contenedores y red
 	docker stop apiserverapi || true
 	docker rm -f apiserverapi || true
 	docker network rm calc-test-api || true
 
-
-# test-api:
-# 	docker network create calc-test-api || true
-# 	docker run -d --network calc-test-api --env PYTHONPATH=/opt/calc --name apiserverapi --env FLASK_APP=app/api.py -p 5001:5001 -w /opt/calc calculator-app:latest flask run --host=0.0.0.0
-# 	docker run --network calc-test-api --name api-tests --env PYTHONPATH=/opt/calc --env BASE_URL=http://apiserverapi:5001/ -w /opt/calc calculator-app:latest pytest --junit-xml=results/api_result.xml -m api  || true
-# 	docker cp api-tests:/opt/calc/results ./
-# 	docker stop apiserverapi || true
-# 	docker rm --force apiserverapi || true
-# 	docker stop api-tests || true
-# 	docker rm --force api-tests || true
-# 	docker network rm calc-test-api || true
-
 test-e2e:
+	####### Limpieza previa de red y contenedores
+	docker network rm calc-test-e2e || true
 	docker network create calc-test-e2e || true
 	docker stop apiservere2e || true
 	docker rm --force apiservere2e || true
@@ -72,17 +58,33 @@ test-e2e:
 	docker rm --force calc-web || true
 	docker stop e2e-tests || true
 	docker rm --force e2e-tests || true
-	docker run -d --network calc-test-e2e --env PYTHONPATH=/opt/calc --name apiservere2e --env FLASK_APP=app/api.py -p 5002:5002 -w /opt/calc calculator-app:latest flask run --host=0.0.0.0
+
+	####### Levanta backend sin exponer puerto al host
+	docker run -d --network calc-test-e2e --env PYTHONPATH=/opt/calc --name apiservere2e \
+		--env FLASK_APP=app/api.py -w /opt/calc calculator-app:latest flask run --host=0.0.0.0 --port=5002
+
+	####### Levanta frontend con puerto 80
 	docker run -d --network calc-test-e2e --name calc-web -p 80:80 calc-web
+
+	####### Prepara contenedor Cypress para e2e
 	docker create --network calc-test-e2e --name e2e-tests cypress/included:4.9.0 --browser chrome || true
+
+	####### Copia archivos Cypress al contenedor
 	docker cp ./test/e2e/cypress.json e2e-tests:/cypress.json
 	docker cp ./test/e2e/cypress e2e-tests:/cypress
+
+	####### Ejecuta pruebas e2e
 	docker start -a e2e-tests || true
-	docker cp e2e-tests:/results ./  || true
-	docker rm --force apiservere2e  || true
+
+	####### Copia resultados al host
+	docker cp e2e-tests:/results ./ || true
+
+	####### Limpieza final
+	docker rm --force apiservere2e || true
 	docker rm --force calc-web || true
 	docker rm --force e2e-tests || true
 	docker network rm calc-test-e2e || true
+
 
 test-e2e-wiremock:
 	docker network create calc-test-e2e-wiremock || true

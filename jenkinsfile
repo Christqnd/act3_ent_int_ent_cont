@@ -1,0 +1,56 @@
+pipeline {
+    agent {
+        label 'docker'
+    }
+    stages {
+        stage('Source') {
+            steps {
+                git branch: 'main', url: 'https://github.com/Christqnd/act3_ent_int_ent_cont.git'
+            }
+        }
+        stage('Build') {
+            steps {
+                echo 'Building stage!'
+                sh 'make build'
+            }
+        }
+        stage('Unit tests') {
+            steps {
+                sh 'make test-unit'
+                archiveArtifacts artifacts: 'results/unit_result.xml'
+            }
+        }
+        stage('API tests') {
+            steps {
+                sh 'make test-api'
+                archiveArtifacts artifacts: 'results/api_result.xml'
+            }
+        }
+        stage('E2E tests') {
+            steps {
+                sh 'make test-e2e'
+                archiveArtifacts artifacts: 'results/cypress_result.xml'
+            }
+        }
+    }
+    post {
+        always {
+            junit 'results/*_result.xml'
+            cleanWs()
+        }
+        success {
+            // Comentado para ejecución real
+            // emailext subject: "Pipeline successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            //         to: "devops@unir.net",
+            //         body: "El trabajo '${env.JOB_NAME}' terminó exitosamente en la ejecución #${env.BUILD_NUMBER}."
+            echo "Simulación de envío de correo: El trabajo '${env.JOB_NAME}' terminó correctamente en la ejecución #${env.BUILD_NUMBER}."
+        }
+        failure {
+            // Comentado para ejecución real
+            // emailext subject: "Pipeline failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+            //         to: "devops@unir.net",
+            //         body: "El trabajo '${env.JOB_NAME}' falló en la ejecución #${env.BUILD_NUMBER}."
+            echo "Simulación de envío de correo: El trabajo '${env.JOB_NAME}' falló en la ejecución #${env.BUILD_NUMBER}."
+        }
+    }
+}
